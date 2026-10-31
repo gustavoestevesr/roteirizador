@@ -39,7 +39,18 @@
     <h2>Endereços selecionados</h2>
     <mat-list role="list">
       @for (address of selectedAddresses(); track address.place_id) {
-        <mat-list-item role="listitem">{{ address.display_name }}</mat-list-item>
+        <mat-list-item role="listitem">
+          <span class="selected-address-name">{{ address.display_name }}</span>
+          <button
+            class="remove-address-button"
+            type="button"
+            [attr.aria-label]="'Remover endereço ' + address.display_name"
+            title="Remover endereço"
+            (click)="removeSelectedAddress(address)"
+          >
+            <mat-icon fontSet="material-symbols-outlined" aria-hidden="true">delete</mat-icon>
+          </button>
+        </mat-list-item>
       } @empty {
         <mat-list-item role="listitem">Nenhum endereço selecionado.</mat-list-item>
       }

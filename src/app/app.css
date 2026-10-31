@@ -23,6 +23,37 @@
   margin-top: 1.5rem;
 }
 
+.selected-address-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.remove-address-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: #b91c1c;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 2.5rem;
+  justify-content: center;
+  margin-left: 0.5rem;
+  width: 2.5rem;
+}
+
+.remove-address-button:hover,
+.remove-address-button:focus-visible {
+  background: #fee2e2;
+}
+
+.remove-address-button:focus-visible {
+  outline: 2px solid #b91c1c;
+  outline-offset: 2px;
+}
+
 .search-form {
   display: grid;
   gap: 0.625rem;

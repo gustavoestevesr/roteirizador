@@ -2,9 +2,10 @@ import { Component, signal } from '@angular/core';
 import { LeafletModule } from '@asymmetrik/ngx-leaflet';
 import * as Leaflet from 'leaflet';
 import { MatListModule } from '@angular/material/list';
+import { MatIconModule } from '@angular/material/icon';
 
 @Component({
-  imports: [LeafletModule, MatListModule],
+  imports: [LeafletModule, MatListModule, MatIconModule],
   selector: 'app-root',
   styleUrl: './app.css',
   templateUrl: './app.html',
@@ -15,6 +16,7 @@ export class App {
   readonly isLocating = signal(false);
   readonly locationError = signal<string | null>(null);
   readonly isSearching = signal(false);
+  readonly lastAddressSearched = signal<string>('');
   readonly searchError = signal<string | null>(null);
   readonly addressResults = signal<AddressSearchResult[]>([]);
   readonly hasSearched = signal(false);
@@ -48,6 +50,13 @@ export class App {
       this.hasSearched.set(false);
       return;
     }
+
+    const sameLastQuery = this.lastAddressSearched().includes(query);
+    if (sameLastQuery) {
+      return;
+    }
+
+    this.lastAddressSearched.set(query);
 
     this.isSearching.set(true);
     this.searchError.set(null);
@@ -83,6 +92,29 @@ export class App {
     }
   }
 
+  removeSelectedAddress(selected: AddressSearchResult): void {
+    const addresses = this.selectedAddresses();
+    const selectedIndex = addresses.findIndex((address) => address.place_id === selected.place_id);
+
+    if (selectedIndex === -1) {
+      return;
+    }
+
+    this.markers.splice(selectedIndex, 1)[0]?.remove();
+    const remainingAddresses = addresses.filter(
+      (address) => address.place_id !== selected.place_id,
+    );
+    this.selectedAddresses.set(remainingAddresses);
+
+    this.markers.forEach((marker, index) => {
+      const description = `${index + 1}° Rota - ${remainingAddresses[index].display_name}`;
+      marker.options.title = description;
+      marker.options.alt = description;
+      marker.getElement()?.setAttribute('title', description);
+      marker.getElement()?.setAttribute('alt', description);
+    });
+  }
+
   selectAddress(result: AddressSearchResult): void {
     if (!this.map) {
       this.searchError.set('O mapa ainda não está pronto. Tente novamente.');
@@ -90,20 +122,22 @@ export class App {
     }
 
     const location = new Leaflet.LatLng(Number(result.lat), Number(result.lon));
-    this.map.setView(location, 16);
+    this.map.setView(location, 12);
 
     if (this.selectedAddresses().some((address) => address.place_id === result.place_id)) {
       return;
     }
 
+    const index = this.selectedAddresses().length + 1;
+    const description = `${index}° Rota - ${result.display_name}`;
     const marker = Leaflet.marker(location, {
       icon: new Leaflet.Icon({
         iconSize: [25, 41],
         iconAnchor: [12, 41],
         iconUrl: 'assets/blue-marker.svg',
       }),
-      title: result.display_name,
-      alt: result.display_name,
+      title: description,
+      alt: description,
     }).addTo(this.map);
 
     this.markers.push(marker);
@@ -129,7 +163,7 @@ export class App {
         }
 
         const location = new Leaflet.LatLng(coords.latitude, coords.longitude);
-        this.map.setView(location, Math.max(this.map.getZoom(), 15));
+        this.map.setView(location, Math.max(this.map.getZoom(), 12));
 
         if (this.currentLocationMarker) {
           this.currentLocationMarker.setLatLng(location);

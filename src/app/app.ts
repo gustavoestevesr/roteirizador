@@ -1,12 +1,10 @@
 import { Component, signal } from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { LeafletModule } from '@asymmetrik/ngx-leaflet';
 import * as Leaflet from 'leaflet';
+import { MatListModule } from '@angular/material/list';
 
 @Component({
-  imports: [LeafletModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatFormFieldModule],
+  imports: [LeafletModule, MatListModule],
   selector: 'app-root',
   styleUrl: './app.css',
   templateUrl: './app.html',
@@ -16,9 +14,15 @@ export class App {
 
   readonly isLocating = signal(false);
   readonly locationError = signal<string | null>(null);
+  readonly isSearching = signal(false);
+  readonly searchError = signal<string | null>(null);
+  readonly addressResults = signal<AddressSearchResult[]>([]);
+  readonly hasSearched = signal(false);
+  readonly selectedAddresses = signal<AddressSearchResult[]>([]);
 
   private map: Leaflet.Map | null = null;
   private currentLocationMarker: Leaflet.CircleMarker | null = null;
+  readonly markers: Leaflet.Marker[] = [];
 
   options: Leaflet.MapOptions = {
     layers: getLayers(),
@@ -32,6 +36,78 @@ export class App {
 
   onMapReady(map: Leaflet.Map): void {
     this.map = map;
+  }
+
+  async searchAddresses(event: SubmitEvent, addressQuery: string): Promise<void> {
+    event.preventDefault();
+    const query = addressQuery.trim();
+
+    if (!query) {
+      this.searchError.set('Digite um endereço para pesquisar.');
+      this.addressResults.set([]);
+      this.hasSearched.set(false);
+      return;
+    }
+
+    this.isSearching.set(true);
+    this.searchError.set(null);
+    this.addressResults.set([]);
+    this.hasSearched.set(false);
+
+    const params = new URLSearchParams({
+      format: 'jsonv2',
+      limit: '5',
+      'accept-language': 'pt-BR',
+      q: query,
+    });
+
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`);
+      if (!response.ok) {
+        throw new Error(`Address search failed with status ${response.status}`);
+      }
+
+      const payload: unknown = await response.json();
+      if (!Array.isArray(payload) || !payload.every(isAddressSearchResult)) {
+        throw new Error('Address search returned an invalid response');
+      }
+
+      this.addressResults.set(payload);
+      this.hasSearched.set(true);
+    } catch {
+      this.searchError.set(
+        'Não foi possível pesquisar endereços. Verifique sua conexão e tente novamente.',
+      );
+    } finally {
+      this.isSearching.set(false);
+    }
+  }
+
+  selectAddress(result: AddressSearchResult): void {
+    if (!this.map) {
+      this.searchError.set('O mapa ainda não está pronto. Tente novamente.');
+      return;
+    }
+
+    const location = new Leaflet.LatLng(Number(result.lat), Number(result.lon));
+    this.map.setView(location, 16);
+
+    if (this.selectedAddresses().some((address) => address.place_id === result.place_id)) {
+      return;
+    }
+
+    const marker = Leaflet.marker(location, {
+      icon: new Leaflet.Icon({
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        iconUrl: 'assets/blue-marker.svg',
+      }),
+      title: result.display_name,
+      alt: result.display_name,
+    }).addTo(this.map);
+
+    this.markers.push(marker);
+    this.selectedAddresses.update((addresses) => [...addresses, result]);
   }
 
   getMyLocation(): void {
@@ -77,6 +153,29 @@ export class App {
   }
 }
 
+interface AddressSearchResult {
+  place_id: number;
+  display_name: string;
+  lat: string;
+  lon: string;
+}
+
+const isAddressSearchResult = (value: unknown): value is AddressSearchResult => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const result = value as Record<string, unknown>;
+  return (
+    typeof result['place_id'] === 'number' &&
+    typeof result['display_name'] === 'string' &&
+    typeof result['lat'] === 'string' &&
+    Number.isFinite(Number(result['lat'])) &&
+    typeof result['lon'] === 'string' &&
+    Number.isFinite(Number(result['lon']))
+  );
+};
+
 const getGeolocationErrorMessage = (error: GeolocationPositionError): string => {
   switch (error.code) {
     case error.PERMISSION_DENIED:
@@ -93,57 +192,7 @@ const getGeolocationErrorMessage = (error: GeolocationPositionError): string => 
 export const getLayers = (): Leaflet.Layer[] => {
   return [
     new Leaflet.TileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors'
+      attribution: '&copy; OpenStreetMap contributors',
     } as Leaflet.TileLayerOptions),
-    ...getMarkers(),
-    ...getRoutes(),
-    ...getPolygons()
   ] as Leaflet.Layer[];
-};
-
-export const getPolygons = (): Leaflet.Polygon[] => {
-  return [
-    new Leaflet.Polygon([
-      new Leaflet.LatLng(43.5181349, 16.4537963),
-      new Leaflet.LatLng(43.517890, 16.439939),
-      new Leaflet.LatLng(43.515599, 16.446556),
-      new Leaflet.LatLng(43.518025, 16.463492)
-    ] as Leaflet.LatLng[],
-      {
-        fillColor: '#eb530d',
-        color: '#eb780d'
-      } as Leaflet.PolylineOptions)
-  ] as Leaflet.Polygon[];
-};
-
-export const getMarkers = (): Leaflet.Marker[] => {
-  return [
-    new Leaflet.Marker(new Leaflet.LatLng(43.5121264, 16.4700729), {
-      icon: new Leaflet.Icon({
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-        iconUrl: 'assets/blue-marker.svg',
-      }),
-      title: 'Workspace'
-    } as Leaflet.MarkerOptions),
-    new Leaflet.Marker(new Leaflet.LatLng(43.5074826, 16.4390046), {
-      icon: new Leaflet.Icon({
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-        iconUrl: 'assets/red-marker.svg',
-      }),
-      title: 'Riva'
-    } as Leaflet.MarkerOptions),
-  ] as Leaflet.Marker[];
-};
-
-export const getRoutes = (): Leaflet.Polyline[] => {
-  return [
-    new Leaflet.Polyline([
-      new Leaflet.LatLng(43.5121264, 16.4700729),
-      new Leaflet.LatLng(43.5074826, 16.4390046),
-    ] as Leaflet.LatLng[], {
-      color: '#0d9148'
-    } as Leaflet.PolylineOptions)
-  ] as Leaflet.Polyline[];
 };

@@ -1,5 +1,52 @@
-<main class="flex flex-row flex-nowrap gap-4">
-  <div class="map-shell">
+<main class="app-layout">
+  <aside class="search-panel">
+    <h1>Pesquisar endereço</h1>
+    <form class="search-form" (submit)="searchAddresses($event, addressInput.value)">
+      <label for="address-query">Endereço</label>
+      <input
+        id="address-query"
+        #addressInput
+        type="search"
+        placeholder="Rua, número, cidade"
+        autocomplete="street-address"
+      />
+      <button type="submit" [disabled]="isSearching()">
+        {{ isSearching() ? 'Pesquisando...' : 'Pesquisar' }}
+      </button>
+      <small>Busca de endereços por OpenStreetMap Nominatim.</small>
+    </form>
+
+    @if (searchError(); as error) {
+      <p class="search-message search-error" role="alert">{{ error }}</p>
+    }
+
+    @if (hasSearched() && addressResults().length === 0) {
+      <p class="search-message" role="status">Nenhum endereço encontrado.</p>
+    }
+
+    @if (addressResults().length > 0) {
+      <ul class="search-results" aria-label="Resultados da pesquisa">
+        @for (result of addressResults(); track result.place_id) {
+          <li>
+            <button type="button" (click)="selectAddress(result)">
+              {{ result.display_name }}
+            </button>
+          </li>
+        }
+      </ul>
+    }
+
+    <h2>Endereços selecionados</h2>
+    <mat-list role="list">
+      @for (address of selectedAddresses(); track address.place_id) {
+        <mat-list-item role="listitem">{{ address.display_name }}</mat-list-item>
+      } @empty {
+        <mat-list-item role="listitem">Nenhum endereço selecionado.</mat-list-item>
+      }
+    </mat-list>
+  </aside>
+
+  <aside class="map-shell">
     <div
       class="map-container w-full p-0 m-0"
       leaflet
@@ -11,17 +58,8 @@
         {{ isLocating() ? 'Obtendo localização...' : 'Minha localização' }}
       </button>
       @if (locationError(); as error) {
-        <p role="status">{{ error }}</p>
+        <p role="alert">{{ error }}</p>
       }
     </div>
-  </div>
-
-  <form class="example-form">
-    <mat-form-field class="w-full" appearance="outline">
-      <mat-label>Favorite food</mat-label>
-      <input matInput placeholder="Ex. Pizza" value="Sushi" />
-    </mat-form-field>
-
-    <button color="primary" type="submit">Pesquisar</button>
-  </form>
+  </aside>
 </main>

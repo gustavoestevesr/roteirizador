@@ -1,4 +1,27 @@
-<div class="map-container w-full p-0 m-0"
-     leaflet
-     [leafletOptions]="options">
-</div>
+<main class="flex flex-row flex-nowrap gap-4">
+  <div class="map-shell">
+    <div
+      class="map-container w-full p-0 m-0"
+      leaflet
+      [leafletOptions]="options"
+      (leafletMapReady)="onMapReady($event)"
+    ></div>
+    <div class="location-control">
+      <button type="button" (click)="getMyLocation()" [disabled]="isLocating()">
+        {{ isLocating() ? 'Obtendo localização...' : 'Minha localização' }}
+      </button>
+      @if (locationError(); as error) {
+        <p role="status">{{ error }}</p>
+      }
+    </div>
+  </div>
+
+  <form class="example-form">
+    <mat-form-field class="w-full" appearance="outline">
+      <mat-label>Favorite food</mat-label>
+      <input matInput placeholder="Ex. Pizza" value="Sushi" />
+    </mat-form-field>
+
+    <button color="primary" type="submit">Pesquisar</button>
+  </form>
+</main>

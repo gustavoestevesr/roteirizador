@@ -1,3 +1,37 @@
-.map-container {
+.map-shell {
   height: 100vh;
+  position: relative;
+}
+
+.map-container {
+  height: 100%;
+}
+
+.location-control {
+  position: absolute;
+  right: 1rem;
+  top: 1rem;
+  z-index: 1000;
+}
+
+.location-control button {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 0.25rem;
+  box-shadow: 0 1px 5px rgb(0 0 0 / 40%);
+  cursor: pointer;
+  padding: 0.625rem 0.875rem;
+}
+
+.location-control button:disabled {
+  cursor: wait;
+}
+
+.location-control p {
+  background: #fff;
+  border-radius: 0.25rem;
+  box-shadow: 0 1px 5px rgb(0 0 0 / 40%);
+  margin-top: 0.5rem;
+  max-width: 20rem;
+  padding: 0.625rem 0.875rem;
 }

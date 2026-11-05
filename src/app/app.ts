@@ -1,8 +1,9 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { LeafletModule } from '@asymmetrik/ngx-leaflet';
 import * as Leaflet from 'leaflet';
 import { MatListModule } from '@angular/material/list';
 import { MatIconModule } from '@angular/material/icon';
+import { AddressSearchResult, OpenstreetmapService } from './services/openstreetmap';
 
 @Component({
   imports: [LeafletModule, MatListModule, MatIconModule],
@@ -12,6 +13,8 @@ import { MatIconModule } from '@angular/material/icon';
 })
 export class App {
   protected readonly title = signal('roteirizador');
+
+  private readonly openstreetmapService = inject(OpenstreetmapService);
 
   readonly isLocating = signal(false);
   readonly locationError = signal<string | null>(null);
@@ -51,37 +54,16 @@ export class App {
       return;
     }
 
-    const sameLastQuery = this.lastAddressSearched().includes(query);
-    if (sameLastQuery) {
-      return;
-    }
-
-    this.lastAddressSearched.set(query);
-
     this.isSearching.set(true);
     this.searchError.set(null);
     this.addressResults.set([]);
     this.hasSearched.set(false);
 
-    const params = new URLSearchParams({
-      format: 'jsonv2',
-      limit: '5',
-      'accept-language': 'pt-BR',
-      q: query,
-    });
-
     try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`);
-      if (!response.ok) {
-        throw new Error(`Address search failed with status ${response.status}`);
-      }
+      const results = await this.openstreetmapService.searchAddresses(query);
 
-      const payload: unknown = await response.json();
-      if (!Array.isArray(payload) || !payload.every(isAddressSearchResult)) {
-        throw new Error('Address search returned an invalid response');
-      }
+      this.addressResults.set(results);
 
-      this.addressResults.set(payload);
       this.hasSearched.set(true);
     } catch {
       this.searchError.set(
@@ -186,29 +168,6 @@ export class App {
     );
   }
 }
-
-interface AddressSearchResult {
-  place_id: number;
-  display_name: string;
-  lat: string;
-  lon: string;
-}
-
-const isAddressSearchResult = (value: unknown): value is AddressSearchResult => {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-
-  const result = value as Record<string, unknown>;
-  return (
-    typeof result['place_id'] === 'number' &&
-    typeof result['display_name'] === 'string' &&
-    typeof result['lat'] === 'string' &&
-    Number.isFinite(Number(result['lat'])) &&
-    typeof result['lon'] === 'string' &&
-    Number.isFinite(Number(result['lon']))
-  );
-};
 
 const getGeolocationErrorMessage = (error: GeolocationPositionError): string => {
   switch (error.code) {

@@ -1,76 +1,175 @@
 <main class="app-layout">
-  <aside class="search-panel">
-    <h1>Pesquisar endereço</h1>
-    <form class="search-form" (submit)="searchAddresses($event, addressInput.value)">
-      <label for="address-query">Endereço</label>
-      <input
-        id="address-query"
-        #addressInput
-        type="search"
-        placeholder="Rua, número, cidade"
-        autocomplete="street-address"
-      />
-      <button type="submit" [disabled]="isSearching()">
-        {{ isSearching() ? 'Pesquisando...' : 'Pesquisar' }}
-      </button>
-      <small>Busca de endereços por OpenStreetMap Nominatim.</small>
-    </form>
+  <aside class="search-panel" aria-label="Planejador de rota">
+    <header class="panel-header">
+      <div class="brand-mark" aria-hidden="true">
+        <mat-icon fontSet="material-symbols-outlined">route</mat-icon>
+      </div>
+      <div>
+        <p class="eyebrow">ROTEIRIZADOR</p>
+        <h1>Planeje sua rota</h1>
+      </div>
+    </header>
 
-    @if (searchError(); as error) {
-      <p class="search-message search-error" role="alert">{{ error }}</p>
-    }
+    <section class="search-section" aria-labelledby="search-heading">
+      <div class="section-heading">
+        <span class="step-number">1</span>
+        <div>
+          <h2 id="search-heading">Adicione paradas</h2>
+          <p>Encontre os endereços que você precisa visitar.</p>
+        </div>
+      </div>
 
-    @if (hasSearched() && addressResults().length === 0) {
-      <p class="search-message" role="status">Nenhum endereço encontrado.</p>
-    }
+      <form
+        class="search-form"
+        (submit)="searchAddresses($event, addressInput.value)"
+        [attr.aria-busy]="isSearching()"
+      >
+        <label for="address-query">Endereço ou local</label>
+        <div class="search-field">
+          <mat-icon fontSet="material-symbols-outlined" aria-hidden="true">search</mat-icon>
+          <input
+            id="address-query"
+            #addressInput
+            type="search"
+            placeholder="Ex.: Avenida Paulista, São Paulo"
+            autocomplete="street-address"
+            [disabled]="isSearching()"
+          />
+          <button type="submit" [disabled]="isSearching()" aria-label="Pesquisar endereço">
+            @if (isSearching()) {
+              <span class="spinner" aria-hidden="true"></span>
+            } @else {
+              <mat-icon fontSet="material-symbols-outlined" aria-hidden="true">arrow_forward</mat-icon>
+            }
+          </button>
+        </div>
+        <small>Pesquisa por OpenStreetMap</small>
+      </form>
 
-    @if (addressResults().length > 0) {
-      <ul class="search-results" aria-label="Resultados da pesquisa">
-        @for (result of addressResults(); track result.place_id) {
-          <li>
-            <button type="button" (click)="selectAddress(result)">
-              {{ result.display_name }}
+      @if (searchError(); as error) {
+        <p class="message error-message" role="alert">
+          <mat-icon fontSet="material-symbols-outlined" aria-hidden="true">error</mat-icon>
+          {{ error }}
+        </p>
+      }
+
+      @if (hasSearched() && addressResults().length === 0) {
+        <p class="message" role="status">
+          <mat-icon fontSet="material-symbols-outlined" aria-hidden="true">location_off</mat-icon>
+          Nenhum endereço encontrado. Tente buscar por rua e cidade.
+        </p>
+      }
+
+      @if (addressResults().length > 0) {
+        <div class="results-block">
+          <p class="list-caption">RESULTADOS</p>
+          <ul class="search-results" aria-label="Resultados da pesquisa">
+            @for (result of addressResults(); track result.place_id) {
+              <li>
+                <button
+                  type="button"
+                  (click)="selectAddress(result)"
+                  [attr.aria-label]="'Adicionar parada: ' + result.display_name"
+                >
+                  <mat-icon fontSet="material-symbols-outlined" aria-hidden="true">location_on</mat-icon>
+                  <span>{{ result.display_name }}</span>
+                  <mat-icon class="result-add" fontSet="material-symbols-outlined" aria-hidden="true">add</mat-icon>
+                </button>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    </section>
+
+    <section class="route-section" aria-labelledby="route-heading">
+      <div class="route-heading">
+        <div class="section-heading">
+          <span class="step-number">2</span>
+          <div>
+            <h2 id="route-heading">Sua rota</h2>
+            <p>
+              @if (selectedAddresses().length === 0) {
+                Suas paradas aparecerão aqui.
+              } @else {
+                {{ selectedAddresses().length }}
+                {{ selectedAddresses().length === 1 ? 'parada adicionada' : 'paradas adicionadas' }}
+              }
+            </p>
+          </div>
+        </div>
+        @if (selectedAddresses().length > 0) {
+          <span class="stop-count">{{ selectedAddresses().length }}</span>
+        }
+      </div>
+
+      <ol class="selected-addresses" aria-label="Paradas da rota">
+        @for (address of selectedAddresses(); track address.place_id; let index = $index) {
+          <li class="stop-item">
+            <span class="stop-marker" aria-label="'Parada ' + (index + 1)">{{ index + 1 }}</span>
+            @if (index < selectedAddresses().length - 1) {
+              <span class="stop-connector" aria-hidden="true"></span>
+            }
+            <span class="selected-address-name">{{ address.display_name }}</span>
+            <button
+              class="remove-address-button"
+              type="button"
+              [attr.aria-label]="'Remover parada ' + (index + 1) + ': ' + address.display_name"
+              title="Remover parada"
+              (click)="removeSelectedAddress(address)"
+            >
+              <mat-icon fontSet="material-symbols-outlined" aria-hidden="true">close</mat-icon>
             </button>
           </li>
+        } @empty {
+          <li class="empty-route">
+            <mat-icon fontSet="material-symbols-outlined" aria-hidden="true">near_me</mat-icon>
+            <p>Pesquise um endereço e adicione sua primeira parada.</p>
+          </li>
         }
-      </ul>
-    }
+      </ol>
 
-    <h2>Endereços selecionados</h2>
-    <mat-list role="list">
-      @for (address of selectedAddresses(); track address.place_id) {
-        <mat-list-item role="listitem">
-          <span class="selected-address-name">{{ address.display_name }}</span>
-          <button
-            class="remove-address-button"
-            type="button"
-            [attr.aria-label]="'Remover endereço ' + address.display_name"
-            title="Remover endereço"
-            (click)="removeSelectedAddress(address)"
-          >
-            <mat-icon fontSet="material-symbols-outlined" aria-hidden="true">delete</mat-icon>
-          </button>
-        </mat-list-item>
-      } @empty {
-        <mat-list-item role="listitem">Nenhum endereço selecionado.</mat-list-item>
-      }
-    </mat-list>
+    </section>
   </aside>
 
-  <aside class="map-shell">
+  <section class="map-shell" aria-label="Mapa da rota">
     <div
-      class="map-container w-full p-0 m-0"
+      class="map-container"
       leaflet
       [leafletOptions]="options"
       (leafletMapReady)="onMapReady($event)"
     ></div>
-    <div class="location-control">
-      <button type="button" (click)="getMyLocation()" [disabled]="isLocating()">
-        {{ isLocating() ? 'Obtendo localização...' : 'Minha localização' }}
-      </button>
-      @if (locationError(); as error) {
-        <p role="alert">{{ error }}</p>
-      }
+
+    <div class="map-controls">
+      <div class="location-control">
+        <button type="button" (click)="getMyLocation()" [disabled]="isLocating()">
+          @if (isLocating()) {
+            <span class="spinner" aria-hidden="true"></span>
+            Obtendo localização
+          } @else {
+            <mat-icon fontSet="material-symbols-outlined" aria-hidden="true">my_location</mat-icon>
+            Minha localização
+          }
+        </button>
+        @if (locationError(); as error) {
+          <p role="alert">
+            <mat-icon fontSet="material-symbols-outlined" aria-hidden="true">error</mat-icon>
+            {{ error }}
+          </p>
+        }
+      </div>
+
+      <div class="order-control">
+        <button
+          type="button"
+          (click)="orderAddresses()"
+          [disabled]="isOrdering() || selectedAddresses().length < 2"
+        >
+          <mat-icon fontSet="material-symbols-outlined" aria-hidden="true">alt_route</mat-icon>
+          {{ isOrdering() ? 'Organizando rota...' : 'Organizar rota' }}
+        </button>
+      </div>
     </div>
-  </aside>
+
+  </section>
 </main>

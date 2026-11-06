@@ -156,7 +156,7 @@ export class App {
           }
 
           const location = new Leaflet.LatLng(coords.latitude, coords.longitude);
-          this.map.setView(location, 9);
+          this.map.setView(location, 12);
 
           if (this.currentLocationMarker) {
             this.currentLocationMarker.setLatLng(location);

@@ -16,6 +16,7 @@ export class App {
 
   private readonly openstreetmapService = inject(OpenstreetmapService);
 
+  readonly isOrdering = signal(false);
   readonly isLocating = signal(false);
   readonly locationError = signal<string | null>(null);
   readonly isSearching = signal(false);
@@ -27,6 +28,7 @@ export class App {
 
   private map: Leaflet.Map | null = null;
   private currentLocationMarker: Leaflet.CircleMarker | null = null;
+  private routePolygon: Leaflet.Polygon | null = null;
   readonly markers: Leaflet.Marker[] = [];
 
   options: Leaflet.MapOptions = {
@@ -41,6 +43,7 @@ export class App {
 
   onMapReady(map: Leaflet.Map): void {
     this.map = map;
+    this.updateRoutePolygon();
   }
 
   async searchAddresses(event: SubmitEvent, addressQuery: string): Promise<void> {
@@ -87,6 +90,7 @@ export class App {
       (address) => address.place_id !== selected.place_id,
     );
     this.selectedAddresses.set(remainingAddresses);
+    this.updateRoutePolygon();
 
     this.markers.forEach((marker, index) => {
       const description = `${index + 1}° Rota - ${remainingAddresses[index].display_name}`;
@@ -124,50 +128,169 @@ export class App {
 
     this.markers.push(marker);
     this.selectedAddresses.update((addresses) => [...addresses, result]);
+    this.updateRoutePolygon();
   }
 
   getMyLocation(): void {
+    void this.locateMyLocation();
+  }
+
+  private locateMyLocation(): Promise<Leaflet.LatLng | null> {
     if (!navigator.geolocation) {
       this.locationError.set('A geolocalização não está disponível neste navegador.');
-      return;
+      return Promise.resolve(null);
     }
 
     this.isLocating.set(true);
     this.locationError.set(null);
 
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        this.isLocating.set(false);
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => {
+          this.isLocating.set(false);
 
-        if (!this.map) {
-          this.locationError.set('O mapa ainda não está pronto. Tente novamente.');
-          return;
-        }
+          if (!this.map) {
+            this.locationError.set('O mapa ainda não está pronto. Tente novamente.');
+            resolve(null);
+            return;
+          }
 
-        const location = new Leaflet.LatLng(coords.latitude, coords.longitude);
-        this.map.setView(location, Math.max(this.map.getZoom(), 12));
+          const location = new Leaflet.LatLng(coords.latitude, coords.longitude);
+          this.map.setView(location, 9);
 
-        if (this.currentLocationMarker) {
-          this.currentLocationMarker.setLatLng(location);
-        } else {
-          this.currentLocationMarker = Leaflet.circleMarker(location, {
-            radius: 8,
-            color: '#ffffff',
-            weight: 3,
-            fillColor: '#2563eb',
-            fillOpacity: 1,
-          }).addTo(this.map);
-          this.currentLocationMarker.bindPopup('Sua localização');
-        }
-      },
-      (error) => {
-        this.isLocating.set(false);
-        this.locationError.set(getGeolocationErrorMessage(error));
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
-    );
+          if (this.currentLocationMarker) {
+            this.currentLocationMarker.setLatLng(location);
+          } else {
+            this.currentLocationMarker = Leaflet.circleMarker(location, {
+              radius: 9,
+              color: '#ffffff',
+              weight: 3,
+              fillColor: '#2563eb',
+              fillOpacity: 1,
+            }).addTo(this.map);
+            this.currentLocationMarker.bindPopup('Sua localização');
+          }
+
+          this.updateRoutePolygon();
+          resolve(location);
+        },
+        (error) => {
+          this.isLocating.set(false);
+          this.locationError.set(getGeolocationErrorMessage(error));
+          resolve(null);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+      );
+    });
+  }
+
+  async orderAddresses(): Promise<void> {
+    if (this.selectedAddresses().length < 2 || this.isOrdering()) {
+      return;
+    }
+
+    this.isOrdering.set(true);
+    try {
+      const location = await this.locateMyLocation();
+      if (!location) {
+        return;
+      }
+
+      const remainingAddresses = this.selectedAddresses().map((address, index) => ({
+        address,
+        marker: this.markers[index],
+      }));
+      const orderedAddresses: AddressSearchResult[] = [];
+      const orderedMarkers: Leaflet.Marker[] = [];
+      let currentLocation = location;
+
+      while (remainingAddresses.length > 0) {
+        let nearestIndex = 0;
+        let nearestDistance = Number.POSITIVE_INFINITY;
+
+        remainingAddresses.forEach(({ address }, index) => {
+          const distance = getDistanceInMeters(
+            currentLocation.lat,
+            currentLocation.lng,
+            Number(address.lat),
+            Number(address.lon),
+          );
+          if (distance < nearestDistance) {
+            nearestDistance = distance;
+            nearestIndex = index;
+          }
+        });
+
+        const [nearest] = remainingAddresses.splice(nearestIndex, 1);
+        orderedAddresses.push(nearest.address);
+        orderedMarkers.push(nearest.marker);
+        currentLocation = new Leaflet.LatLng(
+          Number(nearest.address.lat),
+          Number(nearest.address.lon),
+        );
+      }
+
+      this.selectedAddresses.set(orderedAddresses);
+      this.markers.splice(0, this.markers.length, ...orderedMarkers);
+
+      this.markers.forEach((marker, index) => {
+        const description = `${index + 1}° Rota - ${orderedAddresses[index].display_name}`;
+        marker.options.title = description;
+        marker.options.alt = description;
+        marker.getElement()?.setAttribute('title', description);
+        marker.getElement()?.setAttribute('alt', description);
+      });
+      this.updateRoutePolygon();
+    } finally {
+      this.isOrdering.set(false);
+    }
+  }
+
+  private updateRoutePolygon(): void {
+    if (!this.map || !this.currentLocationMarker || this.selectedAddresses().length < 2) {
+      this.routePolygon?.remove();
+      this.routePolygon = null;
+      return;
+    }
+
+    const routePoints = [
+      this.currentLocationMarker.getLatLng(),
+      ...this.selectedAddresses().map(
+        (address) => new Leaflet.LatLng(Number(address.lat), Number(address.lon)),
+      ),
+    ];
+
+    if (this.routePolygon) {
+      this.routePolygon.setLatLngs(routePoints);
+      return;
+    }
+
+    this.routePolygon = Leaflet.polygon(routePoints, {
+      color: '#2563eb',
+      fillColor: '#3b82f6',
+      fillOpacity: 0.1,
+      weight: 3,
+    }).addTo(this.map);
   }
 }
+
+const getDistanceInMeters = (
+  startLatitude: number,
+  startLongitude: number,
+  endLatitude: number,
+  endLongitude: number,
+): number => {
+  const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
+  const latitudeDifference = toRadians(endLatitude - startLatitude);
+  const longitudeDifference = toRadians(endLongitude - startLongitude);
+  const haversine =
+    Math.sin(latitudeDifference / 2) ** 2 +
+    Math.cos(toRadians(startLatitude)) *
+      Math.cos(toRadians(endLatitude)) *
+      Math.sin(longitudeDifference / 2) ** 2;
+
+  return 2 * 6371000 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+};
 
 const getGeolocationErrorMessage = (error: GeolocationPositionError): string => {
   switch (error.code) {
